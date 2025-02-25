@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from utils import generateImage
 from recover import *
 
-def generate_full_image(size=(64, 64), s=[0, 0, 1], alpha=1.0, noise=0.0, h=1e-5, radius=2.0, sphere=True):
+def generate_full_image(size=(64, 64), s=[0, 0, 1], alpha=1.0, noise=0.0, radius=1.0, sphere=True):
     """
     Generate a 2D image of dimensions `size` (default 64x64) where each pixel
     is computed using the generateImage function. x and y values are linearly
@@ -35,7 +35,7 @@ def generate_full_image(size=(64, 64), s=[0, 0, 1], alpha=1.0, noise=0.0, h=1e-5
     for i, x in enumerate(x_lin):
         for j, y in enumerate(y_lin):
             try:
-                z[i, j], image[i, j], p_array[i, j], q_array[i, j] = generateImage(x, y, s, alpha, noise, h, radius, sphere)
+                z[i, j], image[i, j], p_array[i, j], q_array[i, j] = generateImage(x, y, s, alpha, noise, radius, sphere)
             except ValueError:
                 # Outside the valid sphere projection, set the pixel value to 0.
                 image[i, j] = 0.0
@@ -46,11 +46,16 @@ if __name__ == '__main__':
     # Generate the image
     radius = 1.0
     alpha = 1.0
-    source = [0, 10, 1]
+    source = [0, 100, 0]
     noise = 0.0
     sphere = True
-    z, image, p_array, q_array = generate_full_image((64, 64), source, alpha, noise, h=1e-5, radius=radius, sphere=sphere)
-    
+    z, image, p_array, q_array = generate_full_image((64, 64), source, alpha, noise, radius=radius, sphere=sphere)
+    minn = np.min(image)
+    image[z == 0] = minn
+
+    # Normalize values in image to [0, 1]
+    image = (image - image.min()) / (image.max() - image.min())
+    # quit()
     if sphere:
         os.makedirs(f'output/sphere/r={radius}', exist_ok=True)
         outputDir = f'output/sphere/r={radius}'
@@ -82,9 +87,9 @@ if __name__ == '__main__':
     # ---------- Shape-from-Shading Recovery ----------
     # Here, we treat the generated image as our observed image E.
     # Set regularization parameter lam (e.g., 0.001)
-    lam = 10000.0
+    lam = 100.0
     # Recover surface gradients and depth from E using our recover_surface function.
-    p_rec, q_rec, z_rec, r_rec = recover_surface_iterative(image, source, alpha, lam, max_iter=5000, tol=1e-6, p0=None, q0=None)
+    p_rec, q_rec, z_rec, r_rec = recover_surface_iterative(image, source, alpha, lam, max_iter=5, tol=1e-6, p0=None, q0=None)
     
     # Save the recovered components
     np.save(os.path.join(outputDir, 'p_recovered.npy'), p_rec)
@@ -99,7 +104,7 @@ if __name__ == '__main__':
 
 
     # Plot all 3: actual image, z values and recovered z values.
-    fig, axs = plt.subplots(2, 2, figsize=(15, 5))
+    fig, axs = plt.subplots(2, 2, figsize=(10, 5))
 
     axs[0][0].imshow(image, cmap='gray')
     axs[0][0].set_title('Actual Image')
