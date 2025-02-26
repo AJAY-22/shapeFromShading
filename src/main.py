@@ -51,6 +51,20 @@ if __name__ == '__main__':
     sphere = True
     z, image, p_array, q_array = generate_full_image((64, 64), source, alpha, noise, radius=radius, sphere=sphere)
 
+    p = np.zeros(z.shape)
+    q = np.zeros(z.shape)
+    for j in range(0, z.shape[1]):
+        p[0, j] = z[0, j]
+    for i in range(0, z.shape[0]):
+        q[i, 0] = z[i, 0]
+    for i in range(1, z.shape[0]):
+        for j in range(0, z.shape[1]):
+            p[i, j] = z[i, j] - z[i-1, j]
+    for i in range(0, z.shape[0]):
+        for j in range(1, z.shape[1]):
+            q[i, j] = z[i, j] - z[i, j-1]
+    p_array = p
+    q_array = q
     # Display the image
     minn = np.min(image)
     image[z == 0] = minn
@@ -74,24 +88,13 @@ if __name__ == '__main__':
     plt.imsave(os.path.join(outputDir, f'{obj}_{source}.png'), image, cmap='gray')
     plt.imsave(os.path.join(outputDir, f'{obj}_{source}_z.png'), z, cmap='gray')
     
-    # Display the image
-    # plt.imshow(image, cmap='gray')
-    # plt.title(f'{obj} Image')
-    # plt.axis('off')
-    # plt.show()
-
-    # Display the z values
-    # plt.imshow(z, cmap='gray')
-    # plt.title('Z Values')
-    # plt.axis('off')
-    # plt.show()
 
     # ---------- Shape-from-Shading Recovery ----------
     # Here, we treat the generated image as our observed image E.
     # Set regularization parameter lam (e.g., 0.001)
-    lam = 1.0
+    lam = 100.0
     # Recover surface gradients and depth from E using our recover_surface function.
-    p_rec, q_rec, z_rec, r_rec = recover_surface_iterative(image, source, alpha, lam, max_iter=100000, tol=1e-20, p0=None, q0=None)
+    p_rec, q_rec, z_rec, r_rec = recover_surface_iterative(image, source, alpha, lam, max_iter=10000, tol=1e-20, p0=None, q0=None)
     
     # Save the recovered components
     np.save(os.path.join(outputDir, 'p_recovered.npy'), p_rec)
@@ -115,11 +118,12 @@ if __name__ == '__main__':
         z1[0, j] = z1[0, j-1] + q_array[0, j-1] * dy
     for i in range(1, image.shape[0]):
         for j in range(1, image.shape[1]):
-            z1[i, j] = ((z1[i-1, j] + p_array[i-1, j] * dx) + (z1[i, j-1] + q_array[0, j-1] * dy)) / 2
-
+            z11 = z1[i-1, j] + p_array[i, j] * dx
+            z12 = z1[i, j-1] + q_array[i, j] * dy
+            z1[i,j] = (z11+z12)/2
     # Plot all 3: actual image, z values and recovered z values.
-    fig, axs = plt.subplots(2, 5, figsize=(10, 5))
 
+    fig, axs = plt.subplots(2, 5, figsize=(10, 5))
     axs[0][0].imshow(image, cmap='gray')
     axs[0][0].set_title('Actual Image')
     axs[0][0].axis('off')
@@ -161,7 +165,6 @@ if __name__ == '__main__':
     axs[1][3].imshow(r_rec, cmap='gray')
     axs[1][3].set_title('Recovered R Values')
     axs[1][3].axis('off')
-
 
 
     plt.tight_layout()

@@ -146,11 +146,13 @@ def recover_surface_iterative(E, s, alpha, lam, max_iter=100, tol=1e-6, p0=None,
     # Initialize p and q randomly if not provided
     if p0 is None:
         p = np.random.uniform(-1, 1, size=(m, n))
+        # p = np.ones((m,n))
         # p = np.zeros((m, n))
     else:
         p = p0.copy()
     if q0 is None:
-        q = np.random.uniform(1, -1, size=(m, n))
+        q = np.random.uniform(-1, 1, size=(m, n))
+        # q = np.ones((m,n))
         # q = np.zeros((m, n))
     else:
         q = q0.copy()
@@ -158,15 +160,68 @@ def recover_surface_iterative(E, s, alpha, lam, max_iter=100, tol=1e-6, p0=None,
     s = np.array(s)  # Ensure s is a NumPy array.
     s0, s1, s2 = s[0], s[1], s[2]
     
+    R = np.random.uniform(-1, 1, size=(m, n))
+
     for iteration in tqdm(range(max_iter)):
 
+        # R = reflectance(p, q, s, alpha)
+        # p = (p - p.min()) / (p.max() - p.min())
+        # q = (q - q.min()) / (q.max() - q.min())
         R = reflectance(p, q, s, alpha)
         D = np.sqrt(1 + p**2 + q**2)
         D1 = np.sqrt(s0**2 + s1**2 + 1)
-
         dR_dp = (s0*q**2 + s0-p*q*s1-p)/(D**3 * D1)
         dR_dq = (s1*p**2 + s1-p*q*s0-q)/(D**3 * D1)
+        # dR_dp *= mask
+        # dR_dq *= mask
+        # rx = np.zeros(R.shape)
+        # ry = np.zeros(R.shape)
+        # for j in range(0, R.shape[1]):
+        #     rx[0, j] = R[0, j]
+        # for i in range(0, R.shape[0]):
+        #     ry[i, 0] = R[i, 0]
+        # for i in range(1, R.shape[0]):
+        #     for j in range(0, R.shape[1]):
+        #         rx[i, j] = R[i, j] - R[i-1, j]
+        #         ry[i, j] = R[i, j] - R[i, j-1]
 
+        # px = np.zeros(R.shape)
+        # py = np.zeros(R.shape)
+        # for j in range(0, R.shape[1]):
+        #     px[0, j] = p[0, j]
+        # for i in range(0, R.shape[0]):
+        #     py[i, 0] = p[i, 0]
+        # for i in range(1, R.shape[0]):
+        #     for j in range(0, R.shape[1]):
+        #         px[i, j] = p[i, j] - p[i-1, j]
+        #         py[i, j] = p[i, j] - p[i, j-1]
+
+        # qx = np.zeros(R.shape)
+        # qy = np.zeros(R.shape)
+        # for j in range(0, R.shape[1]):
+        #     qx[0, j] = q[0, j]
+        # for i in range(0, R.shape[0]):
+        #     qy[i, 0] = q[i, 0]
+        # for i in range(1, R.shape[0]):
+        #     for j in range(0, R.shape[1]):
+        #         qx[i, j] = q[i, j] - q[i-1, j]
+        #         qy[i, j] = q[i, j] - q[i, j-1]
+
+        # dR_dp = np.zeros(p.shape)
+        # for i in range(0, p.shape[0]):
+        #     for j in range(0, p.shape[1]):
+        #         if px[i][j] != 0:
+        #             dR_dp[i][j] += rx[i][j]/px[i][j]
+        #         if py[i][j] != 0:
+        #             dR_dp[i][j] += ry[i][j]/py[i][j]
+        # dR_dq = np.zeros(p.shape)
+        # for i in range(0, p.shape[0]):
+        #     for j in range(0, p.shape[1]):
+        #         if qx[i][j] != 0:
+        #             dR_dq[i][j] += rx[i][j]/qx[i][j]
+        #         if qy[i][j] != 0:
+        #             dR_dq[i][j] += ry[i][j]/qy[i][j]
+        
         # Compute the update: error = (E - R)
         error = E - R
         
@@ -184,10 +239,14 @@ def recover_surface_iterative(E, s, alpha, lam, max_iter=100, tol=1e-6, p0=None,
         #     break
         
         p, q = new_p, new_q
+
+
+
             
     
     # After p and q are recovered, integrate them to obtain z.
     # Simple integration assuming unit spacing.
+
 
     z = np.zeros(E.shape)
     dx = 1.0
@@ -198,7 +257,9 @@ def recover_surface_iterative(E, s, alpha, lam, max_iter=100, tol=1e-6, p0=None,
         z[0, j] = z[0, j-1] + q[0, j-1] * dy
     for i in range(1, m):
         for j in range(1, n):
-            z[i, j] = ((z[i-1, j] + p[i-1, j] * dx) + (z[i, j-1] + q[0, j-1] * dy)) / 2
+            z11 = z[i-1, j] + p[i, j] * dx
+            z12 = z[i, j-1] + q[i, j] * dy
+            z[i,j] = (z11+z12)/2
 
     return p, q, z, R
 
