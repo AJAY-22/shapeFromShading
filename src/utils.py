@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import math
 
 
-def depth_z(x, y, radius=1.0):
+def getSphereDepthMap(size=[64, 64], radius=1.0):
     """
     Calculate the positive z-coordinate on the surface of a sphere with the given radius.
     
@@ -14,8 +14,7 @@ def depth_z(x, y, radius=1.0):
         z = sqrt(radius^2 - (x^2 + y^2))
         
     Parameters:
-        x (float): x-coordinate.
-        y (float): y-coordinate.
+        size (list, optional): Dimensions of the output image (default is [64, 64]).
         radius (float, optional): Radius of the sphere (default is 1.0).
     
     Returns:
@@ -24,89 +23,94 @@ def depth_z(x, y, radius=1.0):
     Raises:
         ValueError: If x^2 + y^2 is greater than radius^2.
     """
-    # print(x, y)
-    if x**2 + y**2 > radius**2:
-        raise ValueError("x^2 + y^2 cannot be greater than radius^2 for a valid point on the sphere")
-    return math.sqrt(radius**2 - (x**2 + y**2))
+    x_lin = np.linspace(-1, 1, size[0])
+    y_lin = np.linspace(1, -1, size[1])
+    z = np.zeros(size)
 
-def depth_z_cone(x, y, slope=1.0):
+    # Compute z at (x, y) using sphere formula, i.e., x**2 + y**2 + z**2 = radius**2
+    for i, x in enumerate(x_lin):
+        for j, y in enumerate(y_lin):
+            if x**2 + y**2 > radius**2:
+                z[i, j] = np.nan
+            else:
+                z[i, j] = math.sqrt(radius**2 - x**2 - y**2)
+    
+    return z
+
+def depthConeDepthMap(size=[64, 64], a=2, b=2, c=2):
     """
     Calculate the positive z-coordinate on the surface of a right circular cone.
 
-    Cone Equation:
-        x^2 + y^2 = (z / slope)^2
-    Solving for z we get:
-        z = slope * sqrt(x^2 + y^2)
-
     Parameters:
-        x (float): x-coordinate.
-        y (float): y-coordinate.
-        slope (float, optional): Controls the steepness of the cone (default is 1.0).
+        size (list, optional): Dimensions of the output image (default is [64, 64]).
+        a (float, optional): Semi-major axis of the cone (default is 2).
+        b (float, optional): Semi-minor axis of the cone (default is 2).
+        c (float, optional): Height of the cone (default is 2).
 
     Returns:
         float: The positive z-value on the cone.
     """
-    a = 2
-    b = 2
-    c = 2
-    return -1 * c * math.sqrt((x**2)/(a**2) + (y**2)/(b**2))
+    x_lin = np.linspace(-1, 1, size[0])
+    y_lin = np.linspace(1, -1, size[1])
+    z = np.zeros(size)
 
-def generateImage(x, y, s, alpha, noise=0.0, h=1e-5, radius=1.0, sphere=True):
+    for i, x in enumerate(x_lin):
+        for j, y in enumerate(y_lin):
+            z[i, j] = c * math.sqrt((x**2)/(a**2) + (y**2)/(b**2))
+
+    return z
+
+def generateImage(s, alpha, noise=0.0, depthMap=None):
     """
-    Computes the dot product between the unit normal at (x, y) on the sphere
-    (defined via depth_z) and the vector s, raises it to the power alpha, then adds noise.
-    
-    The surface is defined as z = depth_z(x, y) where:
-        depth_z(x, y) = sqrt(radius^2 - x^2 - y^2)
+    Computes the dot product between the unit normal at (x, y) on the depthMap 
+    and the vector s, raises it to the power alpha, then adds noise.
     
     The normal is computed as:
         p = ∂z/∂x,   q = ∂z/∂y
         n = (-p, -q, 1)/sqrt(1+p^2+q^2)
     
     Parameters:
-        x (float): x-coordinate.
-        y (float): y-coordinate.
         s (array-like): A 3-dimensional vector.
         alpha (float): Exponent for the dot product.
         noise (float, optional): Noise added to the result after exponentiation.
-        h (float, optional): Step size for finite difference. Default is 1e-5.
-        radius (float, optional): Radius of the sphere used in depth_z. Default is 1.0.
-    
+        depthMap (np.ndarray): A 2D NumPy array representing the depth map.
+
     Returns:
-        float: (n dot s)^alpha + noise.
+        np.adarray: (n dot s)^alpha + noise.
     
     Raises:
         ValueError: If (x^2 + y^2) > radius^2.
     """
-    if sphere:
-        # Compute z at (x, y) using depth_z function (must be defined elsewhere in utils.py)
-        z = depth_z(x, y, radius)
-        p = x/(math.sqrt(radius**2 - x**2 - y**2))
-        q = y/(math.sqrt(radius**2 - x**2 - y**2))
-    else:
-        z = depth_z_cone(x, y)
-        
-        # Approximate partial derivatives using central differences
-        # p = ∂z/∂x
-        z_plus_h = depth_z_cone(x + h, y, radius)
-        z_minus_h = depth_z_cone(x - h, y, radius)
-        p = (z_plus_h - z_minus_h) / (2 * h)
-        
-        # q = ∂z/∂y
-        z_plus_h = depth_z_cone(x, y + h, radius)
-        z_minus_h = depth_z_cone(x, y - h, radius)
-        q = (z_plus_h - z_minus_h) / (2 * h)
+    if depthMap is None:
+        print('No depth map provided, Generating sphere depth map with raddius 1')
+        depthMap = getSphereDepthMap()
+
+    # Compute the gradients
+    p = np.gradient(depthMap, axis=0)
+    q = np.gradient(depthMap, axis=1)
     
-    # Compute the unit normal vector n = (-p, -q, 1) / sqrt(1 + p^2 + q^2)
-    denom = math.sqrt(1 + p**2 + q**2)
-    n = np.array([-p, -q, 1.0]) / denom
+    mask = np.ones(p.shape)
+    mask[np.isnan(p)] = 0
+    mask[np.isnan(q)] = 0
     
-    # Compute dot product of n and s
-    s = np.array(s)
-    dot = np.dot(n, s)
-    
-    # Return (dot**alpha) plus noise
-    return z, (dot ** alpha) + noise, p, q
+    p[np.isnan(p)] = np.nanmin(p)
+    q[np.isnan(q)] = np.nanmin(q)
+
+
+    # Compute the normal vector
+    denom = np.sqrt(1 + p**2 + q**2)
+
+    # Compute the dot product
+    dot = (-p * s[0] - q * s[1] + s[2]) * mask / denom
+    image = dot ** alpha
+    # Normalize image
+    image = (image - np.min(image)) / (np.max(image) - np.min(image))
+
+    image *= mask
+    # Add noise
+    image += noise
+ 
+    return p, q, image 
 
 def generateReflecatance(p, q, s, alpha):
     denom = math.sqrt(1 + p**2 + q**2)
@@ -126,31 +130,6 @@ def generateFullRef(p, q, s, alpha):
                 image[i, j] = 0.0
     return image
 
-# def generate_smooth_surface(noise=0.1, alpha=1.0):
-#     """
-#     Generate a smooth surface based on the given parameters.
-
-#     Parameters:
-#     - size: Tuple indicating the dimensions of the surface (height, width).
-#     - noise: Float indicating the amount of noise to add to the surface.
-#     - alpha: Float controlling the smoothness of the surface.
-
-#     Returns:
-#     - surface: 2D NumPy array representing the smooth surface.
-#     """
-#     # Create a grid of points
-#     x = np.linspace(-3, 3, size[0])
-#     y = np.linspace(-3, 3, size[1])
-#     X, Y = np.meshgrid(x, y)
-
-#     # Generate a smooth function (e.g., Gaussian)
-#     Z = depth_z(x, y)
-
-#     # Add noise to the surface
-#     noise_array = noise * np.random.normal(size=Z.shape)
-#     surface = Z + noise_array
-
-#     return surface
 
 # Example usage
 if __name__ == '__main__':
